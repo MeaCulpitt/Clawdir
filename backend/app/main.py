@@ -423,31 +423,34 @@ def get_agent_badge(agent_id: str, db: Session = Depends(get_db)):
         </svg>'''
         return Response(content=svg, media_type="image/svg+xml")
     
-    # Determine badge color based on ownership verification and trust
+    # Determine badge - only ownership-verified agents get the checkmark
     if agent.verified_ownership and agent.trust_score >= 50:
         color = "#10b981"  # Green - ownership verified + high trust
         status = "✓ Verified"
     elif agent.verified_ownership:
         color = "#6366f1"  # Purple - ownership verified
         status = "✓ Verified"
-    elif agent.verified_endpoint and agent.trust_score >= 20:
-        color = "#f59e0b"  # Yellow - endpoint reachable + some trust
-        status = "Online"
-    elif agent.trust_score >= 20:
-        color = "#f59e0b"  # Yellow - some trust
-        status = "Listed"
     else:
-        color = "#6b7280"  # Gray - new
-        status = "Listed"
+        # Not verified - just show "ClawDir" with trust score, no status badge
+        color = "#6b7280"  # Gray
+        status = ""
     
     trust = f"{agent.trust_score:.0f}"
     
-    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="140" height="20">
-        <rect width="70" height="20" rx="3" fill="#555"/>
-        <rect x="70" width="70" height="20" rx="3" fill="{color}"/>
-        <text x="35" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir</text>
-        <text x="105" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">{status} {trust}</text>
-    </svg>'''
+    if agent.verified_ownership:
+        # Verified badge with status
+        svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="150" height="20">
+            <rect width="70" height="20" rx="3" fill="#555"/>
+            <rect x="70" width="80" height="20" rx="3" fill="{color}"/>
+            <text x="35" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir</text>
+            <text x="110" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">{status} {trust}</text>
+        </svg>'''
+    else:
+        # Unverified - minimal badge, just shows they're listed
+        svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20">
+            <rect width="100" height="20" rx="3" fill="#6b7280"/>
+            <text x="50" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir {trust}</text>
+        </svg>'''
     
     return Response(content=svg, media_type="image/svg+xml", headers={"Cache-Control": "max-age=300"})
 
