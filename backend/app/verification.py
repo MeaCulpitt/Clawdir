@@ -291,6 +291,8 @@ def get_verification_status(
     return {
         "agent_id": str(agent.id),
         "verified_endpoint": agent.verified_endpoint,
+        "verified_ownership": agent.verified_ownership,
+        "ownership_verified_at": agent.ownership_verified_at.isoformat() if agent.ownership_verified_at else None,
         "verified_email": agent.verified_email,
         "last_verification": agent.last_verification.isoformat() if agent.last_verification else None,
         "last_latency_ms": agent.last_latency_ms,
