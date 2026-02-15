@@ -155,6 +155,16 @@ async def stripe_webhook(
             db.commit()
             print(f"❌ Agent {agent.name} downgraded to free (cancelled)")
     
+    elif event["type"] == "customer.subscription.paused":
+        subscription = event["data"]["object"]
+        subscription_id = subscription["id"]
+        
+        agent = db.query(Agent).filter(Agent.stripe_subscription_id == subscription_id).first()
+        if agent:
+            agent.subscription_tier = "free"
+            db.commit()
+            print(f"⏸️ Agent {agent.name} downgraded to free (paused)")
+    
     return {"status": "ok"}
 
 
