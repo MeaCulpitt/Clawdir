@@ -17,8 +17,13 @@ from app.schemas import (
 from app.auth import generate_api_key, hash_api_key, get_current_agent, get_optional_agent
 from app.trust import update_agent_trust
 from app.config import get_settings
+from app.models import Base
+from app.database import engine
 
 settings = get_settings()
+
+# Create tables on startup
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="ClawDir",
