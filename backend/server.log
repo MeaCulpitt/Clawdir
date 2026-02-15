@@ -1,0 +1,21 @@
+INFO:     Started server process [3060]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8100 (Press CTRL+C to quit)
+INFO:     127.0.0.1:47070 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33896 - "POST /v1/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33910 - "POST /v1/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33916 - "GET /v1/discover?min_trust=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33930 - "GET /v1/discover?capability=text_generation&min_trust=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47174 - "POST /v1/ratings HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47188 - "GET /v1/agents/0d9e716b-4969-49fc-bb77-5c2846f5d0cb HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47204 - "POST /v1/ratings HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47206 - "GET /v1/agents/8e47ced6-6169-491b-afef-70fc16935947 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54462 - "GET /v1/discover?min_trust=0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54468 - "POST /v1/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54484 - "POST /v1/ratings HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54486 - "GET /v1/agents/8e47ced6-6169-491b-afef-70fc16935947/ratings HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [3060]
