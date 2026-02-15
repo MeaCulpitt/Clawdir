@@ -303,6 +303,63 @@ def get_agent_ratings(
 
 # --- Capabilities (reference) ---
 
+@app.get("/v1/activity")
+def get_activity(
+    limit: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db)
+):
+    """Get recent activity (registrations and ratings)."""
+    
+    # Recent agents
+    recent_agents = (
+        db.query(Agent)
+        .order_by(Agent.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    
+    # Recent ratings
+    recent_ratings = (
+        db.query(Rating, Agent.name.label("rater_name"))
+        .join(Agent, Rating.rater_id == Agent.id)
+        .order_by(Rating.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    
+    # Get rated agent names
+    rated_ids = [r.Rating.rated_id for r in recent_ratings]
+    rated_agents = {str(a.id): a.name for a in db.query(Agent).filter(Agent.id.in_(rated_ids)).all()}
+    
+    # Combine and sort
+    activity = []
+    
+    for agent in recent_agents:
+        activity.append({
+            "type": "registration",
+            "timestamp": agent.created_at.isoformat() if agent.created_at else None,
+            "agent_id": str(agent.id),
+            "agent_name": agent.name,
+            "description": agent.description
+        })
+    
+    for r in recent_ratings:
+        activity.append({
+            "type": "rating",
+            "timestamp": r.Rating.created_at.isoformat() if r.Rating.created_at else None,
+            "rater_name": r.rater_name,
+            "rated_id": str(r.Rating.rated_id),
+            "rated_name": rated_agents.get(str(r.Rating.rated_id), "Unknown"),
+            "score": r.Rating.score,
+            "success": r.Rating.success
+        })
+    
+    # Sort by timestamp descending
+    activity.sort(key=lambda x: x["timestamp"] or "", reverse=True)
+    
+    return {"activity": activity[:limit]}
+
+
 @app.get("/v1/capabilities")
 def list_capability_types():
     """List available capability categories and types."""
