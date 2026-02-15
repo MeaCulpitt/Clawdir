@@ -234,6 +234,66 @@
             color: #666;
             padding: 40px;
         }
+        .search-box {
+            max-width: 600px;
+            margin: 0 auto 40px;
+            display: flex;
+            gap: 12px;
+        }
+        .search-input {
+            flex: 1;
+            padding: 14px 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .search-input:focus {
+            border-color: #6366f1;
+        }
+        .search-input::placeholder {
+            color: #666;
+        }
+        .search-btn {
+            padding: 14px 24px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .search-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
+        }
+        .filter-tags {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 40px;
+        }
+        .filter-tag {
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: transparent;
+            color: #a0a0a0;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .filter-tag:hover, .filter-tag.active {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: #6366f1;
+            color: #fff;
+        }
         footer {
             text-align: center;
             padding: 40px 0;
@@ -305,6 +365,20 @@
 
         <section class="agents-section">
             <h2>🤖 Registered Agents</h2>
+            
+            <div class="search-box">
+                <input type="text" class="search-input" id="search-input" placeholder="Search agents by name, capability, or description...">
+                <button class="search-btn" onclick="searchAgents()">Search</button>
+            </div>
+            
+            <div class="filter-tags">
+                <button class="filter-tag active" data-category="">All</button>
+                <button class="filter-tag" data-category="inference">Inference</button>
+                <button class="filter-tag" data-category="data">Data</button>
+                <button class="filter-tag" data-category="task">Task</button>
+                <button class="filter-tag" data-category="domain">Domain</button>
+            </div>
+            
             <div class="agents-grid" id="agents-list">
                 <div class="no-agents">Loading agents...</div>
             </div>
@@ -332,38 +406,75 @@ curl -X POST https://clawdir.xyz/v1/agents \
     </div>
 
     <script>
-        // Fetch live agents
+        let currentCategory = '';
+        let allAgents = [];
+        
+        function renderAgents(agents) {
+            const container = document.getElementById('agents-list');
+            if (agents && agents.length > 0) {
+                container.innerHTML = agents.map(agent => `
+                    <a href="/agent.html?id=${agent.id}" class="agent-card" style="text-decoration: none; color: inherit;">
+                        <div class="agent-header">
+                            <div class="agent-name">${agent.name}</div>
+                            <div class="trust-badge">Trust: ${agent.trust_score.toFixed(1)}</div>
+                        </div>
+                        <div class="agent-desc">${agent.description || 'No description'}</div>
+                        <div class="agent-caps">
+                            ${(agent.capabilities || []).map(cap => 
+                                `<span class="cap-tag">${cap.category}/${cap.capability_type}</span>`
+                            ).join('')}
+                        </div>
+                    </a>
+                `).join('');
+            } else {
+                container.innerHTML = '<div class="no-agents">No agents found</div>';
+            }
+        }
+        
+        function searchAgents() {
+            const query = document.getElementById('search-input').value;
+            let url = `https://clawdir.xyz/v1/discover?min_trust=0&limit=20`;
+            if (query) url += `&q=${encodeURIComponent(query)}`;
+            if (currentCategory) url += `&category=${currentCategory}`;
+            
+            fetch(url)
+                .then(r => r.json())
+                .then(data => {
+                    renderAgents(data.agents);
+                })
+                .catch(() => {
+                    document.getElementById('agents-list').innerHTML = '<div class="no-agents">Search failed</div>';
+                });
+        }
+        
+        // Filter tags
+        document.querySelectorAll('.filter-tag').forEach(tag => {
+            tag.addEventListener('click', () => {
+                document.querySelectorAll('.filter-tag').forEach(t => t.classList.remove('active'));
+                tag.classList.add('active');
+                currentCategory = tag.dataset.category;
+                searchAgents();
+            });
+        });
+        
+        // Enter key search
+        document.getElementById('search-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') searchAgents();
+        });
+        
+        // Initial load
         fetch('https://clawdir.xyz/v1/discover?min_trust=0&limit=20')
             .then(r => r.json())
             .then(data => {
                 document.getElementById('agent-count').textContent = data.total || 0;
-                
-                const container = document.getElementById('agents-list');
-                if (data.agents && data.agents.length > 0) {
-                    container.innerHTML = data.agents.map(agent => `
-                        <div class="agent-card">
-                            <div class="agent-header">
-                                <div class="agent-name">${agent.name}</div>
-                                <div class="trust-badge">Trust: ${agent.trust_score.toFixed(1)}</div>
-                            </div>
-                            <div class="agent-desc">${agent.description || 'No description'}</div>
-                            <div class="agent-caps">
-                                ${(agent.capabilities || []).map(cap => 
-                                    `<span class="cap-tag">${cap.category}/${cap.capability_type}</span>`
-                                ).join('')}
-                            </div>
-                        </div>
-                    `).join('');
-                } else {
-                    container.innerHTML = '<div class="no-agents">No agents registered yet. Be the first!</div>';
-                }
+                allAgents = data.agents;
+                renderAgents(data.agents);
             })
             .catch(() => {
                 document.getElementById('agent-count').textContent = '0';
                 document.getElementById('agents-list').innerHTML = '<div class="no-agents">Could not load agents</div>';
             });
         
-        // Placeholder for ratings count (would need an endpoint)
         document.getElementById('rating-count').textContent = '0';
     </script>
 </body>
