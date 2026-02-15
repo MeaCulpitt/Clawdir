@@ -18,12 +18,20 @@ from app.auth import generate_api_key, hash_api_key, get_current_agent, get_opti
 from app.trust import update_agent_trust
 from app.config import get_settings
 from app.models import Base
-from app.database import engine
+from app.database import engine, SessionLocal
+from app.seed import seed_database
 
 settings = get_settings()
 
 # Create tables on startup
 Base.metadata.create_all(bind=engine)
+
+# Seed demo data if empty
+db = SessionLocal()
+try:
+    seed_database(db)
+finally:
+    db.close()
 
 app = FastAPI(
     title="ClawDir",
