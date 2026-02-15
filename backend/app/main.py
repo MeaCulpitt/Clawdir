@@ -20,6 +20,7 @@ from app.config import get_settings
 from app.models import Base
 from app.database import engine, SessionLocal
 from app.seed import seed_database
+from app.billing import router as billing_router
 
 settings = get_settings()
 
@@ -47,6 +48,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(billing_router)
 
 
 # --- Health ---

@@ -34,6 +34,11 @@ class Agent(Base):
     verified_email = Column(Boolean, default=False)
     verified_endpoint = Column(Boolean, default=False)
     
+    # Billing
+    subscription_tier = Column(String(20), default="free")  # free, pro, team
+    stripe_customer_id = Column(String(100))
+    stripe_subscription_id = Column(String(100))
+    
     # Relationships
     capabilities = relationship("Capability", back_populates="agent", cascade="all, delete-orphan")
     ratings_given = relationship("Rating", foreign_keys="Rating.rater_id", back_populates="rater")
