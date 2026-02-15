@@ -165,6 +165,16 @@ async def stripe_webhook(
             db.commit()
             print(f"⏸️ Agent {agent.name} downgraded to free (paused)")
     
+    elif event["type"] == "customer.subscription.pending_update_expired":
+        subscription = event["data"]["object"]
+        subscription_id = subscription["id"]
+        
+        agent = db.query(Agent).filter(Agent.stripe_subscription_id == subscription_id).first()
+        if agent:
+            agent.subscription_tier = "free"
+            db.commit()
+            print(f"⏰ Agent {agent.name} downgraded to free (payment expired)")
+    
     return {"status": "ok"}
 
 
