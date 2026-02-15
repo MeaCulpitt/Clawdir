@@ -25,6 +25,7 @@ from app.database import engine, SessionLocal
 from app.seed import seed_database
 from app.billing import router as billing_router
 from app.verification import router as verification_router
+from app.stripe_billing import router as stripe_router
 from app.ratelimit import RateLimitMiddleware
 
 settings = get_settings()
@@ -84,6 +85,7 @@ app.add_middleware(
 # Include routers
 app.include_router(billing_router)
 app.include_router(verification_router)
+app.include_router(stripe_router)
 
 # Rate limiting (after CORS)
 app.add_middleware(RateLimitMiddleware)
