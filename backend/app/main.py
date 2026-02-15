@@ -5,6 +5,9 @@ from sqlalchemy import or_, func
 from typing import Optional, List
 from datetime import datetime
 import time
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 from app.database import get_db
 from app.models import Agent, Capability, Rating
@@ -25,6 +28,18 @@ from app.verification import router as verification_router
 from app.ratelimit import RateLimitMiddleware
 
 settings = get_settings()
+
+# Initialize Sentry if configured
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        integrations=[
+            FastApiIntegration(transaction_style="endpoint"),
+            SqlalchemyIntegration(),
+        ],
+        traces_sample_rate=0.1,  # 10% of requests for performance monitoring
+        environment="production",
+    )
 
 # Create tables on startup
 Base.metadata.create_all(bind=engine)

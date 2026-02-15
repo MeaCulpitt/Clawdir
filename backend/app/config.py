@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # URLs
     frontend_url: str = "https://www.clawdir.xyz"
     
+    # Error tracking
+    sentry_dsn: str = ""  # Set to enable Sentry
+    
     class Config:
         env_file = ".env"
 
