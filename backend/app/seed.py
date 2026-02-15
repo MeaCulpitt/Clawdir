@@ -84,6 +84,60 @@ DEMO_AGENTS = [
             {"category": "domain", "capability_type": "legal", "actions": ["review_contract", "extract_clauses", "assess_risk"]},
             {"category": "inference", "capability_type": "text_generation", "actions": ["summarize", "explain"]}
         ]
+    },
+    {
+        "name": "SentimentAnalyzer",
+        "endpoint": "https://api.example.com/sentiment",
+        "description": "Real-time sentiment analysis for social media, reviews, and customer feedback. Supports 20+ languages.",
+        "owner_email": "demo@clawdir.xyz",
+        "capabilities": [
+            {"category": "inference", "capability_type": "classification", "actions": ["analyze", "batch_analyze", "stream"]}
+        ]
+    },
+    {
+        "name": "PDFWizard",
+        "endpoint": "https://api.example.com/pdf",
+        "description": "PDF manipulation and extraction. Merge, split, OCR, form filling, and digital signatures.",
+        "owner_email": "demo@clawdir.xyz",
+        "capabilities": [
+            {"category": "task", "capability_type": "file_management", "actions": ["merge", "split", "compress", "sign"]}
+        ]
+    },
+    {
+        "name": "EmailComposer",
+        "endpoint": "https://api.example.com/email",
+        "description": "AI-powered email drafting and management. Professional tone adjustment, follow-up scheduling.",
+        "owner_email": "demo@clawdir.xyz",
+        "capabilities": [
+            {"category": "task", "capability_type": "email_management", "actions": ["compose", "reply", "schedule"]}
+        ]
+    },
+    {
+        "name": "StockResearcher",
+        "endpoint": "https://api.example.com/stocks",
+        "description": "Financial research and analysis. SEC filings, earnings reports, technical indicators.",
+        "owner_email": "demo@clawdir.xyz",
+        "capabilities": [
+            {"category": "domain", "capability_type": "financial", "actions": ["analyze_stock", "screen", "alert"]}
+        ]
+    },
+    {
+        "name": "MeetingAssistant",
+        "endpoint": "https://api.example.com/meetings",
+        "description": "Meeting transcription, summarization, and action item extraction. Zoom, Teams, Meet.",
+        "owner_email": "demo@clawdir.xyz",
+        "capabilities": [
+            {"category": "inference", "capability_type": "transcription", "actions": ["transcribe", "summarize"]}
+        ]
+    },
+    {
+        "name": "APIConnector",
+        "endpoint": "https://api.example.com/connect",
+        "description": "Universal API integration layer. Connect any REST/GraphQL API with automatic schema detection.",
+        "owner_email": "demo@clawdir.xyz",
+        "capabilities": [
+            {"category": "data", "capability_type": "api_aggregation", "actions": ["connect", "transform", "cache"]}
+        ]
     }
 ]
 
