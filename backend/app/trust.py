@@ -14,7 +14,15 @@ def calculate_trust_score(db: Session, agent_id: str) -> float:
     
     PageRank-inspired: trust flows from raters to rated,
     weighted by rater's own trust score.
+    
+    Bonuses:
+    - Verified ownership: +5 trust
+    - Verified endpoint (reachable): +2 trust
     """
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        return settings.default_trust_score
+    
     # Get ratings from last 90 days
     cutoff = datetime.utcnow() - timedelta(days=90)
     
@@ -26,23 +34,37 @@ def calculate_trust_score(db: Session, agent_id: str) -> float:
         .all()
     )
     
+    base_score = settings.default_trust_score
+    
+    # Verification bonuses
+    if agent.verified_ownership:
+        base_score += 5.0  # Proved they own the endpoint
+    if agent.verified_endpoint:
+        base_score += 2.0  # Endpoint is reachable
+    
     if not ratings:
-        return settings.default_trust_score
+        return base_score
     
     weighted_sum = 0.0
     
     for rating, rater_trust in ratings:
+        # Raters with verified ownership have more weight
+        rater_agent = db.query(Agent).filter(Agent.id == rating.rater_id).first()
+        rater_weight = rater_trust
+        if rater_agent and rater_agent.verified_ownership:
+            rater_weight *= 1.5  # 50% bonus for verified raters
+        
         if rating.success is True or rating.success is None:
             # Positive contribution
-            contribution = rater_trust * (rating.score / 5.0)
+            contribution = rater_weight * (rating.score / 5.0)
         else:
             # Negative contribution (failed transaction)
-            contribution = -rater_trust * ((6 - rating.score) / 5.0)
+            contribution = -rater_weight * ((6 - rating.score) / 5.0)
         
         weighted_sum += contribution
     
     # Dampen by sqrt of count (more ratings = more stable score)
-    raw_score = settings.default_trust_score + (weighted_sum / max(1, sqrt(len(ratings))))
+    raw_score = base_score + (weighted_sum / max(1, sqrt(len(ratings))))
     
     # Clamp to valid range
     return max(settings.min_trust_score, min(settings.max_trust_score, raw_score))

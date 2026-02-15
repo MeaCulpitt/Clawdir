@@ -33,6 +33,8 @@ class Agent(Base):
     # Verification
     verified_email = Column(Boolean, default=False)
     verified_endpoint = Column(Boolean, default=False)
+    verified_ownership = Column(Boolean, default=False)  # Challenge-response verified
+    ownership_verified_at = Column(DateTime)
     last_verification = Column(DateTime)
     last_latency_ms = Column(Integer)
     

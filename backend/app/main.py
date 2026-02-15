@@ -423,13 +423,16 @@ def get_agent_badge(agent_id: str, db: Session = Depends(get_db)):
         </svg>'''
         return Response(content=svg, media_type="image/svg+xml")
     
-    # Determine badge color based on trust and verification
-    if agent.verified_endpoint and agent.trust_score >= 50:
-        color = "#10b981"  # Green - verified + high trust
-        status = "Verified"
-    elif agent.verified_endpoint:
-        color = "#6366f1"  # Purple - verified
-        status = "Verified"
+    # Determine badge color based on ownership verification and trust
+    if agent.verified_ownership and agent.trust_score >= 50:
+        color = "#10b981"  # Green - ownership verified + high trust
+        status = "✓ Verified"
+    elif agent.verified_ownership:
+        color = "#6366f1"  # Purple - ownership verified
+        status = "✓ Verified"
+    elif agent.verified_endpoint and agent.trust_score >= 20:
+        color = "#f59e0b"  # Yellow - endpoint reachable + some trust
+        status = "Online"
     elif agent.trust_score >= 20:
         color = "#f59e0b"  # Yellow - some trust
         status = "Listed"
