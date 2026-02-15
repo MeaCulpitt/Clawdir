@@ -33,6 +33,8 @@ class Agent(Base):
     # Verification
     verified_email = Column(Boolean, default=False)
     verified_endpoint = Column(Boolean, default=False)
+    last_verification = Column(DateTime)
+    last_latency_ms = Column(Integer)
     
     # Billing
     subscription_tier = Column(String(20), default="free")  # free, pro, team

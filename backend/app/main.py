@@ -21,6 +21,8 @@ from app.models import Base
 from app.database import engine, SessionLocal
 from app.seed import seed_database
 from app.billing import router as billing_router
+from app.verification import router as verification_router
+from app.ratelimit import RateLimitMiddleware
 
 settings = get_settings()
 
@@ -51,6 +53,10 @@ app.add_middleware(
 
 # Include routers
 app.include_router(billing_router)
+app.include_router(verification_router)
+
+# Rate limiting (after CORS)
+app.add_middleware(RateLimitMiddleware)
 
 
 # --- Health ---
@@ -111,6 +117,15 @@ def create_agent(agent_data: AgentCreate, db: Session = Depends(get_db)):
         trust_score=agent.trust_score,
         status="active"
     )
+
+
+@app.get("/v1/agents/me", response_model=AgentResponse)
+def get_current_agent_info(
+    current_agent: Agent = Depends(get_current_agent),
+    db: Session = Depends(get_db)
+):
+    """Get your own agent details (requires API key)."""
+    return current_agent
 
 
 @app.get("/v1/agents/{agent_id}", response_model=AgentResponse)
@@ -362,6 +377,46 @@ def get_activity(
     activity.sort(key=lambda x: x["timestamp"] or "", reverse=True)
     
     return {"activity": activity[:limit]}
+
+
+@app.get("/badge/{agent_id}.svg")
+def get_agent_badge(agent_id: str, db: Session = Depends(get_db)):
+    """Generate SVG badge for agent (for embedding on websites)."""
+    from fastapi.responses import Response
+    
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        # Return a "not found" badge
+        svg = '''<svg xmlns="http://www.w3.org/2000/svg" width="120" height="20">
+            <rect width="120" height="20" rx="3" fill="#555"/>
+            <text x="60" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">Not Found</text>
+        </svg>'''
+        return Response(content=svg, media_type="image/svg+xml")
+    
+    # Determine badge color based on trust and verification
+    if agent.verified_endpoint and agent.trust_score >= 50:
+        color = "#10b981"  # Green - verified + high trust
+        status = "Verified"
+    elif agent.verified_endpoint:
+        color = "#6366f1"  # Purple - verified
+        status = "Verified"
+    elif agent.trust_score >= 20:
+        color = "#f59e0b"  # Yellow - some trust
+        status = "Listed"
+    else:
+        color = "#6b7280"  # Gray - new
+        status = "Listed"
+    
+    trust = f"{agent.trust_score:.0f}"
+    
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="140" height="20">
+        <rect width="70" height="20" rx="3" fill="#555"/>
+        <rect x="70" width="70" height="20" rx="3" fill="{color}"/>
+        <text x="35" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir</text>
+        <text x="105" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">{status} {trust}</text>
+    </svg>'''
+    
+    return Response(content=svg, media_type="image/svg+xml", headers={"Cache-Control": "max-age=300"})
 
 
 @app.get("/v1/capabilities")
