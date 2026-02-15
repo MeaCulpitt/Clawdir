@@ -41,8 +41,23 @@ if settings.sentry_dsn:
         environment="production",
     )
 
-# Create tables on startup
-Base.metadata.create_all(bind=engine)
+# Run migrations on startup
+from alembic.config import Config
+from alembic import command
+import os
+
+def run_migrations():
+    """Run Alembic migrations on startup."""
+    try:
+        alembic_cfg = Config(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
+        alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+        command.upgrade(alembic_cfg, "head")
+    except Exception as e:
+        print(f"Migration warning (may be OK on first run): {e}")
+        # Fallback: create tables if migrations fail (e.g., fresh DB)
+        Base.metadata.create_all(bind=engine)
+
+run_migrations()
 
 # Seed demo data if empty
 db = SessionLocal()
