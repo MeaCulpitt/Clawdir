@@ -423,30 +423,28 @@ def get_agent_badge(agent_id: str, db: Session = Depends(get_db)):
         </svg>'''
         return Response(content=svg, media_type="image/svg+xml")
     
-    # Determine badge - only ownership-verified agents get the checkmark
-    if agent.verified_ownership and agent.trust_score >= 50:
-        color = "#10b981"  # Green - ownership verified + high trust
-        status = "✓ Verified"
-    elif agent.verified_ownership:
-        color = "#6366f1"  # Purple - ownership verified
-        status = "✓ Verified"
-    else:
-        # Not verified - just show "ClawDir" with trust score, no status badge
-        color = "#6b7280"  # Gray
-        status = ""
-    
+    # Badge based on subscription tier (paid = verified)
+    is_paid = agent.subscription_tier in ("pro", "enterprise")
     trust = f"{agent.trust_score:.0f}"
     
-    if agent.verified_ownership:
-        # Verified badge with status
+    if agent.subscription_tier == "enterprise":
+        # Enterprise - green with checkmark
         svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="150" height="20">
             <rect width="70" height="20" rx="3" fill="#555"/>
-            <rect x="70" width="80" height="20" rx="3" fill="{color}"/>
+            <rect x="70" width="80" height="20" rx="3" fill="#10b981"/>
             <text x="35" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir</text>
-            <text x="110" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">{status} {trust}</text>
+            <text x="110" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">✓ Verified {trust}</text>
+        </svg>'''
+    elif agent.subscription_tier == "pro":
+        # Pro - purple with checkmark
+        svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="150" height="20">
+            <rect width="70" height="20" rx="3" fill="#555"/>
+            <rect x="70" width="80" height="20" rx="3" fill="#6366f1"/>
+            <text x="35" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir</text>
+            <text x="110" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">✓ Verified {trust}</text>
         </svg>'''
     else:
-        # Unverified - minimal badge, just shows they're listed
+        # Free - gray, no checkmark
         svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20">
             <rect width="100" height="20" rx="3" fill="#6b7280"/>
             <text x="50" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir {trust}</text>

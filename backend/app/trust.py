@@ -16,8 +16,9 @@ def calculate_trust_score(db: Session, agent_id: str) -> float:
     weighted by rater's own trust score.
     
     Bonuses:
-    - Verified ownership: +5 trust
-    - Verified endpoint (reachable): +2 trust
+    - Pro tier: +5 trust
+    - Enterprise tier: +5 trust, ratings carry 1.5x weight
+    - Endpoint reachable: +2 trust
     """
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
@@ -36,11 +37,13 @@ def calculate_trust_score(db: Session, agent_id: str) -> float:
     
     base_score = settings.default_trust_score
     
-    # Verification bonuses
-    if agent.verified_ownership:
-        base_score += 5.0  # Proved they own the endpoint
+    # Paid tier bonus
+    if agent.subscription_tier in ("pro", "enterprise"):
+        base_score += 5.0
+    
+    # Endpoint reachable bonus
     if agent.verified_endpoint:
-        base_score += 2.0  # Endpoint is reachable
+        base_score += 2.0
     
     if not ratings:
         return base_score
@@ -48,17 +51,16 @@ def calculate_trust_score(db: Session, agent_id: str) -> float:
     weighted_sum = 0.0
     
     for rating, rater_trust in ratings:
-        # Raters with verified ownership have more weight
         rater_agent = db.query(Agent).filter(Agent.id == rating.rater_id).first()
         rater_weight = rater_trust
-        if rater_agent and rater_agent.verified_ownership:
-            rater_weight *= 1.5  # 50% bonus for verified raters
+        
+        # Enterprise raters have more weight
+        if rater_agent and rater_agent.subscription_tier == "enterprise":
+            rater_weight *= 1.5
         
         if rating.success is True or rating.success is None:
-            # Positive contribution
             contribution = rater_weight * (rating.score / 5.0)
         else:
-            # Negative contribution (failed transaction)
             contribution = -rater_weight * ((6 - rating.score) / 5.0)
         
         weighted_sum += contribution

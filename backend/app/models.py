@@ -30,11 +30,9 @@ class Agent(Base):
     last_seen = Column(DateTime)
     is_active = Column(Boolean, default=True)
     
-    # Verification
+    # Verification (endpoint health check)
     verified_email = Column(Boolean, default=False)
-    verified_endpoint = Column(Boolean, default=False)
-    verified_ownership = Column(Boolean, default=False)  # Challenge-response verified
-    ownership_verified_at = Column(DateTime)
+    verified_endpoint = Column(Boolean, default=False)  # Is endpoint reachable
     last_verification = Column(DateTime)
     last_latency_ms = Column(Integer)
     
