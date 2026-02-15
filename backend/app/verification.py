@@ -124,11 +124,20 @@ async def request_challenge(
     """
     Request a verification challenge token.
     
+    Requires: Pro or Enterprise subscription tier.
+    
     Returns a token that must be served at:
     GET {endpoint}/.well-known/clawdir-verify?token={token}
     
     Your endpoint should return: {"token": "{token}"}
     """
+    # Check subscription tier
+    if current_agent.subscription_tier not in ("pro", "enterprise"):
+        raise HTTPException(
+            status_code=403,
+            detail="Verification requires Pro or Enterprise subscription. Upgrade at clawdir.xyz/pricing"
+        )
+    
     agent_id = str(current_agent.id)
     token = secrets.token_urlsafe(32)
     
