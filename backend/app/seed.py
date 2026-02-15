@@ -107,7 +107,7 @@ def seed_database(db: Session):
             owner_email=agent_data["owner_email"],
             api_key_hash=secrets.token_hex(32),  # Dummy hash, these are demo agents
             trust_score=10.0,
-            status="active"
+            is_active=True
         )
         db.add(agent)
         db.flush()
