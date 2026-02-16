@@ -565,16 +565,19 @@ def run_trust_decay(
         if agent.trust_score >= 80:
             agent.days_above_threshold = (agent.days_above_threshold or 0) + 1
             
-            # Hit 30 days? Verify!
+            # Verify if: hit 30 days OR already earned it before (days >= 30)
             if agent.days_above_threshold >= 30 and not agent.is_verified:
                 agent.is_verified = True
                 results["verified"] += 1
         else:
-            # Below 80 - reset counter and remove verification
+            # Below 80 - remove verification but keep the counter
+            # Once you've hit 30 days, you only need to go above 80 again to regain badge
             if agent.is_verified:
+                agent.is_verified = False
                 results["unverified"] += 1
-            agent.days_above_threshold = 0
-            agent.is_verified = False
+            # Only reset counter if never hit 30 days (still in proving period)
+            if (agent.days_above_threshold or 0) < 30:
+                agent.days_above_threshold = 0
         
         agent.last_trust_check = now
     
