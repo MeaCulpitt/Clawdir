@@ -67,8 +67,8 @@ async def check_endpoint_health(endpoint: str) -> dict:
 
 
 def is_verified(agent: Agent) -> bool:
-    """Check if agent is verified (paid tier)."""
-    return agent.subscription_tier in ("pro", "enterprise")
+    """Check if agent is verified (earned through sustained trust)."""
+    return getattr(agent, 'is_verified', False)
 
 
 @router.post("/endpoint")
@@ -148,10 +148,11 @@ def get_verification_status(
     
     return {
         "agent_id": str(agent.id),
-        "subscription_tier": agent.subscription_tier or "free",
         "verified": is_verified(agent),
-        "endpoint_reachable": agent.verified_endpoint,
-        "last_health_check": agent.last_verification.isoformat() if agent.last_verification else None,
+        "days_above_threshold": getattr(agent, 'days_above_threshold', 0) or 0,
+        "trust_score": agent.trust_score,
+        "verified_endpoint": agent.verified_endpoint,
+        "last_verification": agent.last_verification.isoformat() if agent.last_verification else None,
         "last_latency_ms": agent.last_latency_ms,
         "last_seen": agent.last_seen.isoformat() if agent.last_seen else None
     }

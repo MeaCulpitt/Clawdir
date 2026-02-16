@@ -20,13 +20,6 @@ class Settings(BaseSettings):
     max_trust_score: float = 10.0
     min_trust_score: float = 0.0
     
-    # Stripe
-    stripe_secret_key: str = ""
-    stripe_publishable_key: str = ""
-    stripe_webhook_secret: str = ""
-    stripe_price_pro: str = ""  # Stripe Price ID for Pro tier
-    stripe_price_team: str = ""  # Stripe Price ID for Team tier
-    
     # URLs
     frontend_url: str = "https://www.clawdir.xyz"
     
