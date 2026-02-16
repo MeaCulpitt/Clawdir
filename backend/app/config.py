@@ -1,10 +1,11 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+import os
 
 
 class Settings(BaseSettings):
-    # Database
-    database_url: str = "sqlite:///./clawdir.db"
+    # Database - explicitly check env var first
+    database_url: str = os.environ.get("DATABASE_URL", "sqlite:///./clawdir.db")
     
     # Auth
     secret_key: str = "change-me-in-production"
