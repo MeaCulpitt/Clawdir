@@ -97,6 +97,27 @@ def root():
     return {"service": "ClawDir", "status": "ok"}
 
 
+@app.post("/v1/admin/reset-db")
+def reset_database(admin_key: str = Query(...)):
+    """Drop all tables and recreate. DESTRUCTIVE."""
+    if admin_key != settings.secret_key:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+    
+    try:
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
+        
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        cols = [c["name"] for c in inspector.get_columns("agents")]
+        
+        return {"status": "ok", "message": "Database reset", "tables": tables, "agent_columns": cols}
+    except Exception as e:
+        import traceback
+        return {"status": "error", "message": str(e), "traceback": traceback.format_exc()}
+
+
 @app.post("/v1/admin/init-db")
 def init_database(admin_key: str = Query(...)):
     """Manually initialize database tables."""
