@@ -53,8 +53,11 @@ def run_migrations():
         command.upgrade(alembic_cfg, "head")
     except Exception as e:
         print(f"Migration warning (may be OK on first run): {e}")
-        # Fallback: create tables if migrations fail (e.g., fresh DB)
-        Base.metadata.create_all(bind=engine)
+    
+    # Always ensure tables exist (create_all is idempotent)
+    print("Ensuring tables exist via create_all...")
+    Base.metadata.create_all(bind=engine)
+    print("create_all complete")
 
 run_migrations()
 
