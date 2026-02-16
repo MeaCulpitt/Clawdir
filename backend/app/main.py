@@ -116,7 +116,11 @@ def init_database(admin_key: str = Query(...)):
         inspector = inspect(engine)
         after = inspector.get_table_names()
         
-        return {"status": "ok", "tables_before": before, "tables_after": after, "models": list(Base.metadata.tables.keys())}
+        # Get columns
+        cols = inspector.get_columns("agents")
+        col_names = [c["name"] for c in cols]
+        
+        return {"status": "ok", "tables_before": before, "tables_after": after, "models": list(Base.metadata.tables.keys()), "agent_columns": col_names}
     except Exception as e:
         import traceback
         return {"status": "error", "message": str(e), "traceback": traceback.format_exc()}
