@@ -104,10 +104,22 @@ def init_database(admin_key: str = Query(...)):
         raise HTTPException(status_code=403, detail="Invalid admin key")
     
     try:
+        # List tables before
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        before = inspector.get_table_names()
+        
+        # Create tables
         Base.metadata.create_all(bind=engine)
-        return {"status": "ok", "message": "Tables created"}
+        
+        # List tables after
+        inspector = inspect(engine)
+        after = inspector.get_table_names()
+        
+        return {"status": "ok", "tables_before": before, "tables_after": after, "models": list(Base.metadata.tables.keys())}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        import traceback
+        return {"status": "error", "message": str(e), "traceback": traceback.format_exc()}
 
 
 @app.get("/health")
