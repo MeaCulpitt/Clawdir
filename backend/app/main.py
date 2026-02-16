@@ -549,3 +549,4 @@ def get_stats(db: Session = Depends(get_db)):
         "total_ratings": total_ratings
     }
 # DB persistence test 20260216020938
+# force redeploy Mon Feb 16 02:24:01 UTC 2026
