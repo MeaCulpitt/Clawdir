@@ -60,12 +60,12 @@ def run_migrations():
 
 run_migrations()
 
-# Seed demo data if empty
-db = SessionLocal()
-try:
-    seed_database(db)
-finally:
-    db.close()
+# Seed disabled - only real agents now
+# db = SessionLocal()
+# try:
+#     seed_database(db)
+# finally:
+#     db.close()
 
 app = FastAPI(
     title="ClawDir",
@@ -216,7 +216,7 @@ def discover_agents(
     q: Optional[str] = Query(None, description="Natural language search"),
     capability: Optional[str] = Query(None, description="Exact capability type"),
     category: Optional[str] = Query(None, description="Category filter"),
-    min_trust: float = Query(20.0, description="Minimum trust score"),
+    min_trust: float = Query(0.0, description="Minimum trust score"),
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
