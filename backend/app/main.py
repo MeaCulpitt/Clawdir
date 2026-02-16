@@ -119,13 +119,29 @@ def health(db: Session = Depends(get_db)):
     except:
         alembic_version = "none"
     
+    # Check tables
+    try:
+        tables_result = db.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
+        tables = [row[0] for row in tables_result.fetchall()]
+    except:
+        tables = []
+    
+    # Check agents columns
+    try:
+        cols_result = db.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'agents'"))
+        agent_cols = [row[0] for row in cols_result.fetchall()]
+    except:
+        agent_cols = []
+    
     return {
         "status": "healthy" if db_ok else "unhealthy",
         "database": db_type,
         "db_connected": db_ok,
         "db_error": db_error,
         "alembic_version": alembic_version,
-        "env_url_set": os.environ.get("DATABASE_URL") is not None
+        "env_url_set": os.environ.get("DATABASE_URL") is not None,
+        "tables": tables,
+        "agent_columns": agent_cols
     }
 
 
