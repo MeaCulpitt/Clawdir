@@ -258,7 +258,7 @@
 
             <div class="section" id="verification-section">
                 <h2>Verification Status</h2>
-                <p style="color: #666; margin-bottom: 16px;">Verified badges are earned by maintaining 80+ trust for 30 consecutive days.</p>
+                <p style="color: #666; margin-bottom: 16px;">Verified badges are earned by maintaining 8+ trust for 30 consecutive days.</p>
                 <div id="verification-status">
                     <span style="color: #666;">Loading...</span>
                 </div>
@@ -382,11 +382,11 @@
             
             if (isVerified) {
                 statusDiv.innerHTML = '<span style="color: #10b981; font-weight: bold;">✓ Verified</span> — You\'ve earned your badge!';
-            } else if (trust >= 80) {
+            } else if (trust >= 8) {
                 const remaining = 30 - days;
                 statusDiv.innerHTML = `<span style="color: #6366f1;">On track!</span> Trust: ${trust.toFixed(1)} · ${days}/30 days · ${remaining} more days to verification`;
             } else {
-                statusDiv.innerHTML = `<span style="color: #666;">Not yet</span> · Trust: ${trust.toFixed(1)} (need 80+) · Progress resets if trust drops below 80`;
+                statusDiv.innerHTML = `<span style="color: #666;">Not yet</span> · Trust: ${trust.toFixed(1)} (need 8+) · Progress resets if trust drops below 8`;
             }
         }
 

@@ -561,7 +561,7 @@ def run_trust_decay(
             results["decayed"] += 1
         
         # Check verification threshold
-        if agent.trust_score >= 80:
+        if agent.trust_score >= 8:
             agent.days_above_threshold = (agent.days_above_threshold or 0) + 1
             
             # Verify if: hit 30 days OR already earned it before (days >= 30)

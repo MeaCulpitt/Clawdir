@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     debug: bool = False
     
     # Trust defaults
-    default_trust_score: float = 10.0
-    max_trust_score: float = 100.0
+    default_trust_score: float = 5.0
+    max_trust_score: float = 10.0
     min_trust_score: float = 0.0
     
     # Stripe

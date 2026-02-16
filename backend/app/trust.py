@@ -35,9 +35,9 @@ def calculate_trust_score(db: Session, agent_id: str) -> float:
     
     base_score = settings.default_trust_score
     
-    # Endpoint reachable bonus
+    # Endpoint reachable bonus (0.2 on 0-10 scale)
     if agent.verified_endpoint:
-        base_score += 2.0
+        base_score += 0.2
     
     if not ratings:
         return base_score
