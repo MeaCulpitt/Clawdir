@@ -95,8 +95,38 @@ def root():
 
 
 @app.get("/health")
-def health():
-    return {"status": "healthy"}
+def health(db: Session = Depends(get_db)):
+    """Health check with DB debug info."""
+    import os
+    from sqlalchemy import text
+    
+    db_url = settings.database_url
+    db_type = "postgresql" if "postgresql" in db_url else "sqlite"
+    
+    # Try to query the DB
+    try:
+        result = db.execute(text("SELECT 1"))
+        db_ok = True
+        db_error = None
+    except Exception as e:
+        db_ok = False
+        db_error = str(e)[:200]
+    
+    # Check alembic version
+    try:
+        version_result = db.execute(text("SELECT version_num FROM alembic_version"))
+        alembic_version = version_result.scalar()
+    except:
+        alembic_version = "none"
+    
+    return {
+        "status": "healthy" if db_ok else "unhealthy",
+        "database": db_type,
+        "db_connected": db_ok,
+        "db_error": db_error,
+        "alembic_version": alembic_version,
+        "env_url_set": os.environ.get("DATABASE_URL") is not None
+    }
 
 
 # --- Agents ---
