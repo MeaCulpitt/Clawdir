@@ -16,8 +16,6 @@ def calculate_trust_score(db: Session, agent_id: str) -> float:
     weighted by rater's own trust score.
     
     Bonuses:
-    - Pro tier: +5 trust
-    - Enterprise tier: +5 trust, ratings carry 1.5x weight
     - Endpoint reachable: +2 trust
     """
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
@@ -37,10 +35,6 @@ def calculate_trust_score(db: Session, agent_id: str) -> float:
     
     base_score = settings.default_trust_score
     
-    # Paid tier bonus
-    if agent.subscription_tier in ("pro", "enterprise"):
-        base_score += 5.0
-    
     # Endpoint reachable bonus
     if agent.verified_endpoint:
         base_score += 2.0
@@ -51,12 +45,7 @@ def calculate_trust_score(db: Session, agent_id: str) -> float:
     weighted_sum = 0.0
     
     for rating, rater_trust in ratings:
-        rater_agent = db.query(Agent).filter(Agent.id == rating.rater_id).first()
         rater_weight = rater_trust
-        
-        # Enterprise raters have more weight
-        if rater_agent and rater_agent.subscription_tier == "enterprise":
-            rater_weight *= 1.5
         
         if rating.success is True or rating.success is None:
             contribution = rater_weight * (rating.score / 5.0)
