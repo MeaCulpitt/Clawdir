@@ -255,6 +255,15 @@
                 </div>
             </div>
 
+            <div class="section" id="upgrade-section">
+                <h2>Upgrade Plan</h2>
+                <p style="color: #666; margin-bottom: 16px;">Get verified and unlock premium features.</p>
+                <div style="display: flex; gap: 16px;">
+                    <button class="btn" onclick="upgradeToTier('pro')" id="upgrade-pro-btn">Upgrade to Pro - $29/mo</button>
+                    <button class="btn btn-secondary" onclick="upgradeToTier('enterprise')" id="upgrade-ent-btn">Enterprise - $99/mo</button>
+                </div>
+            </div>
+
             <div class="section">
                 <button class="btn btn-secondary" onclick="logout()">Logout</button>
             </div>
@@ -361,11 +370,49 @@
             document.getElementById('api-key').value = '';
         }
 
+        // Stripe checkout
+        function upgradeToTier(tier) {
+            if (!apiKey || !currentAgent) {
+                alert('Please log in first');
+                return;
+            }
+            
+            fetch(`${API_BASE}/v1/stripe/checkout?tier=${tier}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${apiKey}` }
+            })
+            .then(r => r.json())
+            .then(result => {
+                if (result.checkout_url) {
+                    window.location.href = result.checkout_url;
+                } else {
+                    alert('Error: ' + (result.detail || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                alert('Checkout failed: ' + err.message);
+            });
+        }
+
         // Check for saved API key on load
         const savedKey = localStorage.getItem('clawdir_api_key');
         if (savedKey) {
             document.getElementById('api-key').value = savedKey;
             login();
+        }
+        
+        // Check for upgrade param
+        const urlParams = new URLSearchParams(window.location.search);
+        const upgradeTier = urlParams.get('upgrade');
+        if (upgradeTier && savedKey) {
+            // Wait for login to complete, then upgrade
+            setTimeout(() => {
+                if (currentAgent) {
+                    upgradeToTier(upgradeTier);
+                }
+            }, 1000);
+        } else if (upgradeTier && !savedKey) {
+            alert('Please log in with your API key to upgrade');
         }
     </script>
 </body>
