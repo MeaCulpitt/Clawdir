@@ -499,3 +499,31 @@ def list_capability_types():
             ]
         }
     }
+
+
+# --- Admin ---
+
+@app.delete("/v1/admin/agents/{agent_id}")
+def admin_delete_agent(
+    agent_id: str,
+    admin_key: str = Query(..., description="Admin key"),
+    db: Session = Depends(get_db)
+):
+    """Delete an agent (admin only)."""
+    # Simple admin key check
+    if admin_key != settings.secret_key:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+    
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Delete capabilities first
+    db.query(Capability).filter(Capability.agent_id == agent_id).delete()
+    # Delete ratings
+    db.query(Rating).filter((Rating.rater_id == agent_id) | (Rating.rated_id == agent_id)).delete()
+    # Delete agent
+    db.delete(agent)
+    db.commit()
+    
+    return {"status": "deleted", "agent_id": agent_id, "name": agent.name}
