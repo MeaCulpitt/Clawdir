@@ -527,3 +527,17 @@ def admin_delete_agent(
     db.commit()
     
     return {"status": "deleted", "agent_id": agent_id, "name": agent.name}
+
+
+# --- Stats ---
+
+@app.get("/v1/stats")
+def get_stats(db: Session = Depends(get_db)):
+    """Get public stats for the directory."""
+    total_agents = db.query(Agent).filter(Agent.is_active == True).count()
+    total_ratings = db.query(Rating).count()
+    
+    return {
+        "total_agents": total_agents,
+        "total_ratings": total_ratings
+    }
