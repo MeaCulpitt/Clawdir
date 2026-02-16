@@ -95,14 +95,7 @@ app.add_middleware(RateLimitMiddleware)
 
 @app.get("/")
 def root():
-    import os
-    db_url = settings.database_url
-    env_db_url = os.environ.get("DATABASE_URL", "NOT_SET")
-    db_type = "postgres" if db_url.startswith("postgresql") else "sqlite"
-    # Mask password in URL for display
-    masked_url = db_url[:30] + "..." if len(db_url) > 30 else db_url
-    masked_env = env_db_url[:30] + "..." if len(env_db_url) > 30 else env_db_url
-    return {"service": "ClawDir", "status": "ok", "database": db_type, "config_url": masked_url, "env_url": masked_env}
+    return {"service": "ClawDir", "status": "ok"}
 
 
 @app.get("/health")
