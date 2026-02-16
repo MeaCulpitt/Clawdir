@@ -31,15 +31,14 @@ class Agent(Base):
     is_active = Column(Boolean, default=True)
     
     # Verification (endpoint health check)
-    verified_email = Column(Boolean, default=False)
     verified_endpoint = Column(Boolean, default=False)  # Is endpoint reachable
     last_verification = Column(DateTime)
     last_latency_ms = Column(Integer)
     
-    # Billing
-    subscription_tier = Column(String(20), default="free")  # free, pro, team
-    stripe_customer_id = Column(String(100))
-    stripe_subscription_id = Column(String(100))
+    # Earned verification (30 days above 80 trust)
+    is_verified = Column(Boolean, default=False)
+    days_above_threshold = Column(Integer, default=0)  # Consecutive days above 80
+    last_trust_check = Column(DateTime)  # Last daily decay/check
     
     # Relationships
     capabilities = relationship("Capability", back_populates="agent", cascade="all, delete-orphan")

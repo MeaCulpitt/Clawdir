@@ -23,9 +23,7 @@ from app.config import get_settings
 from app.models import Base
 from app.database import engine, SessionLocal
 from app.seed import seed_database
-from app.billing import router as billing_router
 from app.verification import router as verification_router
-from app.stripe_billing import router as stripe_router
 from app.ratelimit import RateLimitMiddleware
 
 settings = get_settings()
@@ -83,9 +81,7 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(billing_router)
 app.include_router(verification_router)
-app.include_router(stripe_router)
 
 # Rate limiting (after CORS)
 app.add_middleware(RateLimitMiddleware)
@@ -425,28 +421,19 @@ def get_agent_badge(agent_id: str, db: Session = Depends(get_db)):
         </svg>'''
         return Response(content=svg, media_type="image/svg+xml")
     
-    # Badge based on subscription tier (paid = verified)
-    is_paid = agent.subscription_tier in ("pro", "enterprise")
     trust = f"{agent.trust_score:.0f}"
     
-    if agent.subscription_tier == "enterprise":
-        # Enterprise - green with checkmark
+    # Verified = 30 consecutive days above 80 trust (earned, not paid)
+    if getattr(agent, 'is_verified', False):
+        # Verified - green with checkmark
         svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="150" height="20">
             <rect width="70" height="20" rx="3" fill="#555"/>
             <rect x="70" width="80" height="20" rx="3" fill="#10b981"/>
             <text x="35" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir</text>
             <text x="110" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">✓ Verified {trust}</text>
         </svg>'''
-    elif agent.subscription_tier == "pro":
-        # Pro - purple with checkmark
-        svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="150" height="20">
-            <rect width="70" height="20" rx="3" fill="#555"/>
-            <rect x="70" width="80" height="20" rx="3" fill="#6366f1"/>
-            <text x="35" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir</text>
-            <text x="110" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">✓ Verified {trust}</text>
-        </svg>'''
     else:
-        # Free - gray, no checkmark
+        # Not verified - gray, shows trust score
         svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20">
             <rect width="100" height="20" rx="3" fill="#6b7280"/>
             <text x="50" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir {trust}</text>
@@ -527,6 +514,77 @@ def admin_delete_agent(
     db.commit()
     
     return {"status": "deleted", "agent_id": agent_id, "name": agent.name}
+
+
+# --- Trust Decay (cron job) ---
+
+@app.post("/v1/admin/decay")
+def run_trust_decay(
+    admin_key: str = Query(..., description="Admin key"),
+    db: Session = Depends(get_db)
+):
+    """
+    Run daily trust decay for all agents.
+    Call this once per day via cron.
+    
+    - Trust decays 2% per day without activity
+    - Ratings in past 24h counteract decay
+    - If trust >= 80, increment days_above_threshold
+    - If days_above_threshold >= 30, set is_verified = True
+    - If trust drops below 80, reset counter and remove verification
+    """
+    if admin_key != settings.secret_key:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+    
+    from datetime import timedelta
+    
+    now = datetime.utcnow()
+    yesterday = now - timedelta(days=1)
+    
+    agents = db.query(Agent).filter(Agent.is_active == True).all()
+    
+    results = {"processed": 0, "decayed": 0, "verified": 0, "unverified": 0}
+    
+    for agent in agents:
+        results["processed"] += 1
+        
+        # Count ratings received in past 24h
+        recent_ratings = db.query(Rating).filter(
+            Rating.rated_id == agent.id,
+            Rating.created_at >= yesterday
+        ).count()
+        
+        # Apply decay if no recent ratings
+        if recent_ratings == 0:
+            old_trust = agent.trust_score
+            # Decay 2% per day, minimum 0
+            agent.trust_score = max(0, agent.trust_score * 0.98)
+            results["decayed"] += 1
+        
+        # Check verification threshold
+        if agent.trust_score >= 80:
+            agent.days_above_threshold = (agent.days_above_threshold or 0) + 1
+            
+            # Hit 30 days? Verify!
+            if agent.days_above_threshold >= 30 and not agent.is_verified:
+                agent.is_verified = True
+                results["verified"] += 1
+        else:
+            # Below 80 - reset counter and remove verification
+            if agent.is_verified:
+                results["unverified"] += 1
+            agent.days_above_threshold = 0
+            agent.is_verified = False
+        
+        agent.last_trust_check = now
+    
+    db.commit()
+    
+    return {
+        "status": "ok",
+        "results": results,
+        "timestamp": now.isoformat()
+    }
 
 
 # --- Stats ---

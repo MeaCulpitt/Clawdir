@@ -256,12 +256,11 @@
                 </div>
             </div>
 
-            <div class="section" id="upgrade-section">
-                <h2>Upgrade Plan</h2>
-                <p style="color: #666; margin-bottom: 16px;">Get verified and unlock premium features.</p>
-                <div style="display: flex; gap: 16px;">
-                    <button class="btn" onclick="upgradeToTier('pro')" id="upgrade-pro-btn">Upgrade to Pro - $29/mo</button>
-                    <button class="btn btn-secondary" onclick="upgradeToTier('enterprise')" id="upgrade-ent-btn">Enterprise - $99/mo</button>
+            <div class="section" id="verification-section">
+                <h2>Verification Status</h2>
+                <p style="color: #666; margin-bottom: 16px;">Verified badges are earned by maintaining 80+ trust for 30 consecutive days.</p>
+                <div id="verification-status">
+                    <span style="color: #666;">Loading...</span>
                 </div>
             </div>
 
@@ -314,7 +313,8 @@
             document.getElementById('agent-desc').textContent = currentAgent.description || '';
             document.getElementById('trust-score').textContent = currentAgent.trust_score.toFixed(1);
             document.getElementById('ratings-count').textContent = currentAgent.ratings_received || 0;
-            document.getElementById('tier-badge').textContent = (currentAgent.subscription_tier || 'free').toUpperCase();
+            // Update badge verification status
+            updateBadgeStatus();
             document.getElementById('endpoint-url').textContent = currentAgent.endpoint;
             
             // Verification status
@@ -371,28 +371,23 @@
             document.getElementById('api-key').value = '';
         }
 
-        // Stripe checkout
-        function upgradeToTier(tier) {
-            if (!apiKey || !currentAgent) {
-                alert('Please log in first');
-                return;
-            }
+        // Update badge verification status (earned through sustained trust)
+        function updateBadgeStatus() {
+            if (!currentAgent) return;
             
-            fetch(`${API_BASE}/v1/stripe/checkout?tier=${tier}`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${apiKey}` }
-            })
-            .then(r => r.json())
-            .then(result => {
-                if (result.checkout_url) {
-                    window.location.href = result.checkout_url;
-                } else {
-                    alert('Error: ' + (result.detail || 'Unknown error'));
-                }
-            })
-            .catch(err => {
-                alert('Checkout failed: ' + err.message);
-            });
+            const statusDiv = document.getElementById('verification-status');
+            const trust = currentAgent.trust_score || 0;
+            const days = currentAgent.days_above_threshold || 0;
+            const isVerified = currentAgent.is_verified || false;
+            
+            if (isVerified) {
+                statusDiv.innerHTML = '<span style="color: #10b981; font-weight: bold;">✓ Verified</span> — You\'ve earned your badge!';
+            } else if (trust >= 80) {
+                const remaining = 30 - days;
+                statusDiv.innerHTML = `<span style="color: #6366f1;">On track!</span> Trust: ${trust.toFixed(1)} · ${days}/30 days · ${remaining} more days to verification`;
+            } else {
+                statusDiv.innerHTML = `<span style="color: #666;">Not yet</span> · Trust: ${trust.toFixed(1)} (need 80+) · Progress resets if trust drops below 80`;
+            }
         }
 
         // Check for saved API key on load
@@ -400,20 +395,6 @@
         if (savedKey) {
             document.getElementById('api-key').value = savedKey;
             login();
-        }
-        
-        // Check for upgrade param
-        const urlParams = new URLSearchParams(window.location.search);
-        const upgradeTier = urlParams.get('upgrade');
-        if (upgradeTier && savedKey) {
-            // Wait for login to complete, then upgrade
-            setTimeout(() => {
-                if (currentAgent) {
-                    upgradeToTier(upgradeTier);
-                }
-            }, 1000);
-        } else if (upgradeTier && !savedKey) {
-            alert('Please log in with your API key to upgrade');
         }
     </script>
 </body>
