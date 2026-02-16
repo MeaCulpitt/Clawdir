@@ -97,6 +97,19 @@ def root():
     return {"service": "ClawDir", "status": "ok"}
 
 
+@app.post("/v1/admin/init-db")
+def init_database(admin_key: str = Query(...)):
+    """Manually initialize database tables."""
+    if admin_key != settings.secret_key:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+    
+    try:
+        Base.metadata.create_all(bind=engine)
+        return {"status": "ok", "message": "Tables created"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
     """Health check with DB debug info."""
