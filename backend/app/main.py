@@ -556,9 +556,8 @@ def run_trust_decay(
         
         # Apply decay if no recent ratings
         if recent_ratings == 0:
-            old_trust = agent.trust_score
-            # Decay 2% per day, minimum 0
-            agent.trust_score = max(0, agent.trust_score * 0.98)
+            # Decay 1 point per day, minimum 0
+            agent.trust_score = max(0, agent.trust_score - 1)
             results["decayed"] += 1
         
         # Check verification threshold
