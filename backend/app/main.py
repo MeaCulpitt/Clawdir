@@ -95,7 +95,8 @@ app.add_middleware(RateLimitMiddleware)
 
 @app.get("/")
 def root():
-    return {"service": "ClawDir", "status": "ok"}
+    db_type = "postgres" if settings.database_url.startswith("postgresql") else "sqlite"
+    return {"service": "ClawDir", "status": "ok", "database": db_type}
 
 
 @app.get("/health")
