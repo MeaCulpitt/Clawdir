@@ -1,3 +1,5 @@
+
+```python
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -15,12 +17,15 @@ from app.schemas import (
     AgentCreate, AgentCreateResponse, AgentResponse, AgentUpdate, AgentListResponse,
     CapabilityCreate, CapabilityResponse,
     RatingCreate, RatingResponse,
-    DiscoverResponse
+    DiscoverResponse,
+    PaginatedResponse, FollowResponse, FollowingResponse, FollowersResponse,
+    CategoryCreate, CategoryResponse, AgentCategoryResponse,
+    HealthResponse, RecommendationResponse, SimilarAgentsResponse
 )
 from app.auth import generate_api_key, hash_api_key, get_current_agent, get_optional_agent
-from app.trust import update_agent_trust
+from app.trust import update_agent_trust, update_verification_tiers
 from app.config import get_settings
-from app.models import Base
+from app.models import Base, Follow, Category, AgentCategory
 from app.database import engine, SessionLocal
 from app.seed import seed_database
 from app.verification import router as verification_router
@@ -39,7 +44,7 @@ if settings.sentry_dsn:
             FastApiIntegration(transaction_style="endpoint"),
             SqlalchemyIntegration(),
         ],
-        traces_sample_rate=0.1,  # 10% of requests for performance monitoring
+        traces_sample_rate=0.1,
         environment="production",
     )
 
@@ -57,25 +62,17 @@ def run_migrations():
     except Exception as e:
         print(f"Migration warning (may be OK on first run): {e}")
     
-    # Always ensure tables exist (create_all is idempotent)
     print("Ensuring tables exist via create_all...")
     Base.metadata.create_all(bind=engine)
     print("create_all complete")
 
 run_migrations()
 
-# Seed disabled - only real agents now
-# db = SessionLocal()
-# try:
-#     seed_database(db)
-# finally:
-#     db.close()
-
 
 # --- Background Trust Decay ---
 
 def run_daily_trust_decay():
-    """Background job: run trust decay daily at midnight UTC."""
+    """Background job: run trust decay and verification tiers daily at midnight UTC."""
     from datetime import timedelta
     
     db = SessionLocal()
@@ -85,7 +82,6 @@ def run_daily_trust_decay():
         
         agents = db.query(Agent).filter(Agent.is_active == True).all()
         decayed = 0
-        verified = 0
         
         for agent in agents:
             recent_ratings = db.query(Rating).filter(
@@ -97,21 +93,15 @@ def run_daily_trust_decay():
                 agent.trust_score = max(0, agent.trust_score - 0.2)
                 decayed += 1
             
-            if agent.trust_score >= 7:
-                agent.days_above_threshold = (agent.days_above_threshold or 0) + 1
-                if agent.days_above_threshold >= 30 and not agent.is_verified:
-                    agent.is_verified = True
-                    verified += 1
-            else:
-                if agent.is_verified:
-                    agent.is_verified = False
-                if (agent.days_above_threshold or 0) < 30:
-                    agent.days_above_threshold = 0
-            
             agent.last_trust_check = now
         
         db.commit()
-        print(f"[Trust Decay] {len(agents)} agents processed, {decayed} decayed, {verified} newly verified")
+        print(f"[Trust Decay] {len(agents)} agents processed, {decayed} decayed")
+        
+        # Update verification tiers
+        update_verification_tiers(db)
+        print("[Trust Decay] Verification tiers updated")
+        
     except Exception as e:
         print(f"[Trust Decay] Error: {e}")
         db.rollback()
@@ -148,7 +138,7 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Tighten in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -196,19 +186,15 @@ def init_database(admin_key: str = Query(...)):
         raise HTTPException(status_code=403, detail="Invalid admin key")
     
     try:
-        # List tables before
         from sqlalchemy import inspect
         inspector = inspect(engine)
         before = inspector.get_table_names()
         
-        # Create tables
         Base.metadata.create_all(bind=engine)
         
-        # List tables after
         inspector = inspect(engine)
         after = inspector.get_table_names()
         
-        # Get columns
         cols = inspector.get_columns("agents")
         col_names = [c["name"] for c in cols]
         
@@ -227,7 +213,6 @@ def health(db: Session = Depends(get_db)):
     db_url = settings.database_url
     db_type = "postgresql" if "postgresql" in db_url else "sqlite"
     
-    # Try to query the DB
     try:
         result = db.execute(text("SELECT 1"))
         db_ok = True
@@ -236,21 +221,18 @@ def health(db: Session = Depends(get_db)):
         db_ok = False
         db_error = str(e)[:200]
     
-    # Check alembic version
     try:
         version_result = db.execute(text("SELECT version_num FROM alembic_version"))
         alembic_version = version_result.scalar()
     except:
         alembic_version = "none"
     
-    # Check tables
     try:
         tables_result = db.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
         tables = [row[0] for row in tables_result.fetchall()]
     except:
         tables = []
     
-    # Check agents columns
     try:
         cols_result = db.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'agents'"))
         agent_cols = [row[0] for row in cols_result.fetchall()]
@@ -275,11 +257,9 @@ def health(db: Session = Depends(get_db)):
 def create_agent(agent_data: AgentCreate, db: Session = Depends(get_db)):
     """Register a new agent."""
     
-    # Generate API key
     api_key = generate_api_key()
     api_key_hash = hash_api_key(api_key)
     
-    # Create agent
     agent = Agent(
         name=agent_data.name,
         endpoint=agent_data.endpoint,
@@ -289,9 +269,8 @@ def create_agent(agent_data: AgentCreate, db: Session = Depends(get_db)):
         trust_score=settings.default_trust_score,
     )
     db.add(agent)
-    db.flush()  # Get ID
+    db.flush()
     
-    # Add capabilities
     for cap_data in agent_data.capabilities:
         cap = Capability(
             agent_id=agent.id,
@@ -310,7 +289,7 @@ def create_agent(agent_data: AgentCreate, db: Session = Depends(get_db)):
     
     return AgentCreateResponse(
         id=agent.id,
-        api_key=api_key,  # Only shown once!
+        api_key=api_key,
         name=agent.name,
         trust_score=agent.trust_score,
         status="active"
@@ -395,7 +374,6 @@ def discover_agents(
         .filter(Agent.trust_score >= min_trust)
     )
     
-    # Filter by capability
     if capability or category:
         query = query.join(Capability)
         if capability:
@@ -403,20 +381,17 @@ def discover_agents(
         if category:
             query = query.filter(Capability.category == category)
     
-    # Text search on name/description
     if q:
         search_term = f"%{q}%"
         query = query.filter(
             or_(
-                Agent.name.ilike(search_term),
-                Agent.description.ilike(search_term)
+                Agent.name.ilike(search.description.ilike(search_term)
             )
         )
     
-    # Get total before limit
-    total = query.distinct().count()
+_term),
+                Agent    total = query.distinct().count()
     
-    # Order by trust and get results
     agents = (
         query
         .distinct()
@@ -434,6 +409,338 @@ def discover_agents(
     )
 
 
+# === PAGINATION ENDPOINT ===
+
+@app.get("/v1/agents", response_model=PaginatedResponse)
+def list_agents(
+    cursor: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("trust_score", regex="^(trust_score|created_at)$"),
+    db: Session = Depends(get_db)
+):
+    """List agents with cursor-based pagination."""
+    import base64
+    
+    total = db.query(Agent).filter(Agent.is_active == True).count()
+    query = db.query(Agent).filter(Agent.is_active == True)
+    
+    if cursor:
+        try:
+            cursor_id = base64.b64decode(cursor).decode()
+            if sort_by == "trust_score":
+                score, uid = cursor_id.split(":")
+                query = query.filter(
+                    (Agent.trust_score < float(score)) | 
+                    ((Agent.trust_score == float(score)) & (Agent.id < uid))
+                )
+            else:
+                query = query.filter(Agent.id < cursor_id)
+        except:
+            pass
+    
+    agents = query.order_by(
+        Agent.trust_score.desc(), Agent.id.desc()
+    ).limit(limit + 1).all()
+    
+    has_more = len(agents) > limit
+    if has_more:
+        agents = agents[:limit]
+    
+    next_cursor = None
+    if has_more and agents:
+        last = agents[-1]
+        cursor_str = f"{last.trust_score}:{last.id}"
+        next_cursor = base64.b64encode(cursor_str.encode()).decode()
+    
+    return PaginatedResponse(
+        items=[AgentListResponse.model_validate(a) for a in agents],
+        next_cursor=next_cursor,
+        has_more=has_more,
+        total=total
+    )
+
+
+# === FOLLOW ENDPOINTS ===
+
+@app.post("/v1/agents/{agent_id}/follow")
+def follow_agent(
+    agent_id: str,
+    current_agent: Agent = Depends(get_current_agent),
+    db: Session = Depends(get_db)
+):
+    """Follow an agent."""
+    if str(current_agent.id) == agent_id:
+        raise HTTPException(status_code=400, detail="Cannot follow yourself")
+    
+    target = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    existing = db.query(Follow).filter(
+        Follow.follower_id == str(current_agent.id),
+        Follow.following_id == agent_id
+    ).first()
+    
+    if existing:
+        return {"status": "already_following", "agent_id": agent_id}
+    
+    follow = Follow(follower_id=str(current_agent.id), following_id=agent_id)
+    db.add(follow)
+    db.commit()
+    
+    return {"status": "following", "agent_id": agent_id}
+
+
+@app.delete("/v1/agents/{agent_id}/follow")
+def unfollow_agent(
+    agent_id: str,
+    current_agent: Agent = Depends(get_current_agent),
+    db: Session = Depends(get_db)
+):
+    """Unfollow an agent."""
+    db.query(Follow).filter(
+        Follow.follower_id == str(current_agent.id),
+        Follow.following_id == agent_id
+    ).delete()
+    db.commit()
+    return {"status": "unfollowed", "agent_id": agent_id}
+
+
+@app.get("/v1/agents/{agent_id}/followers", response_model=FollowersResponse)
+def get_followers(
+    agent_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    follows = db.query(Follow, Agent).join(
+        Agent, Follow.follower_id == Agent.id
+    ).filter(Follow.following_id == agent_id).limit(limit).all()
+    
+    followers = [
+        FollowResponse(
+            agent_id=str(f.Agent.id),
+            name=f.Agent.name,
+            trust_score=f.Agent.trust_score,
+            trust_tier=f.Agent.trust_tier or "none"
+        ) for f in follows
+    ]
+    
+    return FollowersResponse(followers=followers, total=len(followers))
+
+
+@app.get("/v1/agents/{agent_id}/following", response_model=FollowingResponse)
+def get_following(
+    agent_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    follows = db.query(Follow, Agent).join(
+        Agent, Follow.following_id == Agent.id
+    ).filter(Follow.follower_id == agent_id).limit(limit).all()
+    
+    following = [
+        FollowResponse(
+            agent_id=str(f.Agent.id),
+            name=f.Agent.name,
+            trust_score=f.Agent.trust_score,
+            trust_tier=f.Agent.trust_tier or "none"
+        ) for f in follows
+    ]
+    
+    return FollowingResponse(following=following, total=len(following))
+
+
+# === CATEGORY ENDPOINTS ===
+
+@app.post("/v1/categories", response_model=CategoryResponse)
+def create_category(
+    category_data: CategoryCreate,
+    current_agent: Agent = Depends(get_current_agent),
+    db: Session = Depends(get_db)
+):
+    """Create a category."""
+    existing = db.query(Category).filter(Category.name == category_data.name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Category already exists")
+    
+    category = Category(
+        name=category_data.name,
+        description=category_data.description,
+        created_by=str(current_agent.id)
+    )
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    
+    return category
+
+
+@app.get("/v1/categories", response_model=List[CategoryResponse])
+def list_categories(db: Session = Depends(get_db)):
+    """List all categories."""
+    return db.query(Category).order_by(Category.name).all()
+
+
+@app.post("/v1/agents/{agent_id}/categories/{category_id}")
+def add_agent_to_category(
+    agent_id: str,
+    category_id: int,
+    current_agent: Agent = Depends(get_current_agent),
+    db: Session = Depends(get_db)
+):
+    """Add agent to category."""
+    if str(current_agent.id) != agent_id:
+        raise HTTPException(status_code=403, detail="Can only modify your own agent")
+    
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    rel = AgentCategory(agent_id=agent_id, category_id=category_id)
+    db.merge(rel)
+    db.commit()
+    
+    return {"status": "added", "category": category.name}
+
+
+@app.get("/v1/categories/{category_id}/agents", response_model=List[AgentListResponse])
+def get_category_agents(
+    category_id: int,
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    agents = db.query(Agent).join(AgentCategory).filter(
+        AgentCategory.category_id == category_id,
+        Agent.is_active == True
+    ).order_by(Agent.trust_score.desc()).limit(limit).all()
+    
+    return [AgentListResponse.model_validate(a) for a in agents]
+
+
+# === HEALTH CHECK ENDPOINT ===
+
+@app.post("/v1/agents/{agent_id}/check-health")
+async def check_agent_health(
+    agent_id: str,
+    current_agent: Agent = Depends(get_current_agent),
+    db: Session = Depends(get_db)
+):
+    """Manually trigger health check for an agent."""
+    import httpx
+    
+    target = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not target:
+        raise HTTPException(status_code=404)
+    
+    start = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{target.endpoint}/health")
+            latency_ms = (time.time() - start) * 1000
+            status = "healthy" if response.status_code < 500 else "degraded"
+    except httpx.TimeoutException:
+        status = "down"
+        latency_ms = None
+    except Exception:
+        status = "degraded"
+        latency_ms = (time.time() - start) * 1000 if 'start' in locals() else None
+    
+    target.last_health_check = datetime.utcnow()
+    target.last_latency_ms = int(latency_ms) if latency_ms else None
+    db.commit()
+    
+    return {"status": status, "latency_ms": latency_ms}
+
+
+@app.get("/v1/agents/{agent_id}/health", response_model=HealthResponse)
+def get_agent_health(agent_id: str, db: Session = Depends(get_db)):
+    """Get agent health metrics."""
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404)
+    
+    uptime = 100.0
+    if agent.last_seen:
+        time_since_seen = (datetime.utcnow() - agent.last_seen).total_seconds()
+        if time_since_seen > 300:
+            uptime = max(0, 100 - (time_since_seen / 60))
+    
+    return HealthResponse(
+        agent_id=agent_id,
+        status="healthy",
+        last_seen=agent.last_seen,
+        last_health_check=agent.last_health_check,
+        latency_ms=agent.last_latency_ms,
+        uptime_percent=uptime
+    )
+
+
+# === RECOMMENDATION ENDPOINTS ===
+
+@app.get("/v1/recommendations", response_model=RecommendationResponse)
+def get_recommendations(
+    current_agent: Agent = Depends(get_current_agent),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db)
+):
+    """Get agent recommendations based on what you rated highly."""
+    highly_rated = db.query(Rating).filter(
+        Rating.rater_id == current_agent.id,
+        Rating.score >= 4
+    ).all()
+    
+    if not highly_rated:
+        agents = db.query(Agent).filter(
+            Agent.is_active == True,
+            Agent.id != str(current_agent.id)
+        ).order_by(Agent.trust_score.desc()).limit(limit).all()
+    else:
+        rated_ids = [r.rated_id for r in highly_rated]
+        caps = db.query(Capability).filter(
+            Capability.agent_id.in_(rated_ids)
+        ).all()
+        
+        cap_types = set(c.capability_type for c in caps)
+        
+        agents = db.query(Agent).join(Capability).filter(
+            Agent.is_active == True,
+            Agent.id != str(current_agent.id),
+            Capability.capability_type.in_(cap_types)
+        ).distinct().order_by(Agent.trust_score.desc()).limit(limit).all()
+    
+    return RecommendationResponse(
+        agents=[AgentListResponse.model_validate(a) for a in agents],
+        total=len(agents)
+    )
+
+
+@app.get("/v1/agents/{agent_id}/similar", response_model=SimilarAgentsResponse)
+def get_similar_agents(
+    agent_id: str,
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db)
+):
+    """Find agents similar to a given agent."""
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404)
+    
+    caps = db.query(Capability).filter(Capability.agent_id == agent_id).all()
+    cap_types = [c.capability_type for c in caps]
+    
+    similar = db.query(Agent).join(Capability).filter(
+        Agent.is_active == True,
+        Agent.id != agent_id,
+        Capability.capability_type.in_(cap_types)
+    ).distinct().order_by(Agent.trust_score.desc()).limit(limit).all()
+    
+    return SimilarAgentsResponse(
+        agent_id=agent_id,
+        similar=[AgentListResponse.model_validate(a) for a in similar],
+        total=len(similar)
+    )
+
+
 # --- Ratings ---
 
 @app.post("/v1/ratings", response_model=RatingResponse)
@@ -444,17 +751,14 @@ def create_rating(
 ):
     """Submit a rating for another agent."""
     
-    # Can't rate yourself
     target_id = str(rating_data.agent_id)
     if str(current_agent.id) == target_id:
         raise HTTPException(status_code=400, detail="Cannot rate yourself")
     
-    # Check target agent exists
     rated_agent = db.query(Agent).filter(Agent.id == target_id).first()
     if not rated_agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
-    # Create rating
     rating = Rating(
         rater_id=current_agent.id,
         rated_id=target_id,
@@ -468,7 +772,6 @@ def create_rating(
     db.add(rating)
     db.commit()
     
-    # Update trust score
     new_trust = update_agent_trust(db, target_id)
     
     return RatingResponse(
@@ -527,7 +830,6 @@ def get_activity(
 ):
     """Get recent activity (registrations and ratings)."""
     
-    # Recent agents
     recent_agents = (
         db.query(Agent)
         .order_by(Agent.created_at.desc())
@@ -535,7 +837,6 @@ def get_activity(
         .all()
     )
     
-    # Recent ratings
     recent_ratings = (
         db.query(Rating, Agent.name.label("rater_name"))
         .join(Agent, Rating.rater_id == Agent.id)
@@ -544,11 +845,9 @@ def get_activity(
         .all()
     )
     
-    # Get rated agent names
     rated_ids = [r.Rating.rated_id for r in recent_ratings]
     rated_agents = {str(a.id): a.name for a in db.query(Agent).filter(Agent.id.in_(rated_ids)).all()}
     
-    # Combine and sort
     activity = []
     
     for agent in recent_agents:
@@ -571,7 +870,6 @@ def get_activity(
             "success": r.Rating.success
         })
     
-    # Sort by timestamp descending
     activity.sort(key=lambda x: x["timestamp"] or "", reverse=True)
     
     return {"activity": activity[:limit]}
@@ -579,12 +877,11 @@ def get_activity(
 
 @app.get("/badge/{agent_id}.svg")
 def get_agent_badge(agent_id: str, db: Session = Depends(get_db)):
-    """Generate SVG badge for agent (for embedding on websites)."""
+    """Generate SVG badge for agent."""
     from fastapi.responses import Response
     
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
-        # Return a "not found" badge
         svg = '''<svg xmlns="http://www.w3.org/2000/svg" width="120" height="20">
             <rect width="120" height="20" rx="3" fill="#555"/>
             <text x="60" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">Not Found</text>
@@ -592,18 +889,25 @@ def get_agent_badge(agent_id: str, db: Session = Depends(get_db)):
         return Response(content=svg, media_type="image/svg+xml")
     
     trust = f"{agent.trust_score:.0f}"
+    tier = getattr(agent, 'trust_tier', 'none') or 'none'
     
-    # Verified = 30 consecutive days above 80 trust (earned, not paid)
-    if getattr(agent, 'is_verified', False):
-        # Verified - green with checkmark
+    # Tier colors
+    tier_colors = {
+        "bronze": "#cd7f32",
+        "silver": "#c0c0c0",
+        "gold": "#ffd700",
+        "none": "#6b7280"
+    }
+    color = tier_colors.get(tier, "#6b7280")
+    
+    if tier != "none":
         svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="150" height="20">
             <rect width="70" height="20" rx="3" fill="#555"/>
-            <rect x="70" width="80" height="20" rx="3" fill="#10b981"/>
+            <rect x="70" width="80" height="20" rx="3" fill="{color}"/>
             <text x="35" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir</text>
-            <text x="110" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">✓ Verified {trust}</text>
+            <text x="110" y="14" text-anchor="middle" fill="#000" font-size="10" font-family="sans-serif" font-weight="bold">{tier.upper()}</text>
         </svg>'''
     else:
-        # Not verified - gray, shows trust score
         svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20">
             <rect width="100" height="20" rx="3" fill="#6b7280"/>
             <text x="50" y="14" text-anchor="middle" fill="#fff" font-size="11" font-family="sans-serif">ClawDir {trust}</text>
@@ -667,7 +971,6 @@ def admin_delete_agent(
     db: Session = Depends(get_db)
 ):
     """Delete an agent (admin only)."""
-    # Simple admin key check
     if admin_key != settings.secret_key:
         raise HTTPException(status_code=403, detail="Invalid admin key")
     
@@ -675,11 +978,8 @@ def admin_delete_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
-    # Delete capabilities first
     db.query(Capability).filter(Capability.agent_id == agent_id).delete()
-    # Delete ratings
     db.query(Rating).filter((Rating.rater_id == agent_id) | (Rating.rated_id == agent_id)).delete()
-    # Delete agent
     db.delete(agent)
     db.commit()
     
@@ -696,12 +996,6 @@ def run_trust_decay(
     """
     Run daily trust decay for all agents.
     Call this once per day via cron.
-    
-    - Trust decays 2% per day without activity
-    - Ratings in past 24h counteract decay
-    - If trust >= 80, increment days_above_threshold
-    - If days_above_threshold >= 30, set is_verified = True
-    - If trust drops below 80, reset counter and remove verification
     """
     if admin_key != settings.secret_key:
         raise HTTPException(status_code=403, detail="Invalid admin key")
@@ -718,39 +1012,35 @@ def run_trust_decay(
     for agent in agents:
         results["processed"] += 1
         
-        # Count ratings received in past 24h
         recent_ratings = db.query(Rating).filter(
             Rating.rated_id == agent.id,
             Rating.created_at >= yesterday
         ).count()
         
-        # Apply decay if no recent ratings
         if recent_ratings == 0:
-            # Decay 0.2 points per day, minimum 0
             agent.trust_score = max(0, agent.trust_score - 0.2)
             results["decayed"] += 1
         
-        # Check verification threshold
         if agent.trust_score >= 7:
             agent.days_above_threshold = (agent.days_above_threshold or 0) + 1
             
-            # Verify if: hit 30 days OR already earned it before (days >= 30)
             if agent.days_above_threshold >= 30 and not agent.is_verified:
                 agent.is_verified = True
                 results["verified"] += 1
         else:
-            # Below 80 - remove verification but keep the counter
-            # Once you've hit 30 days, you only need to go above 80 again to regain badge
             if agent.is_verified:
                 agent.is_verified = False
                 results["unverified"] += 1
-            # Only reset counter if never hit 30 days (still in proving period)
             if (agent.days_above_threshold or 0) < 30:
                 agent.days_above_threshold = 0
         
         agent.last_trust_check = now
     
     db.commit()
+    
+    # Update tiers
+    tier_results = update_verification_tiers(db)
+    results["tiers_updated"] = tier_results["updated"]
     
     return {
         "status": "ok",
@@ -771,5 +1061,6 @@ def get_stats(db: Session = Depends(get_db)):
         "total_agents": total_agents,
         "total_ratings": total_ratings
     }
-# DB persistence test 20260216020938
-# force redeploy Mon Feb 16 02:24:01 UTC 2026
+```
+
+---
