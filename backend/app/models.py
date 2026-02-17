@@ -129,6 +129,3 @@ class AgentCategory(Base):
     
     agent_id = Column(String(36), ForeignKey("agents.id", ondelete="CASCADE"), primary_key=True)
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="CASCADE"), primary_key=True)
-```
-
----
