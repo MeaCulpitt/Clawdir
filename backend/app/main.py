@@ -25,6 +25,9 @@ from app.database import engine, SessionLocal
 from app.seed import seed_database
 from app.verification import router as verification_router
 from app.ratelimit import RateLimitMiddleware
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 settings = get_settings()
 
@@ -68,10 +71,78 @@ run_migrations()
 # finally:
 #     db.close()
 
+
+# --- Background Trust Decay ---
+
+def run_daily_trust_decay():
+    """Background job: run trust decay daily at midnight UTC."""
+    from datetime import timedelta
+    
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        yesterday = now - timedelta(days=1)
+        
+        agents = db.query(Agent).filter(Agent.is_active == True).all()
+        decayed = 0
+        verified = 0
+        
+        for agent in agents:
+            recent_ratings = db.query(Rating).filter(
+                Rating.rated_id == agent.id,
+                Rating.created_at >= yesterday
+            ).count()
+            
+            if recent_ratings == 0:
+                agent.trust_score = max(0, agent.trust_score - 0.2)
+                decayed += 1
+            
+            if agent.trust_score >= 7:
+                agent.days_above_threshold = (agent.days_above_threshold or 0) + 1
+                if agent.days_above_threshold >= 30 and not agent.is_verified:
+                    agent.is_verified = True
+                    verified += 1
+            else:
+                if agent.is_verified:
+                    agent.is_verified = False
+                if (agent.days_above_threshold or 0) < 30:
+                    agent.days_above_threshold = 0
+            
+            agent.last_trust_check = now
+        
+        db.commit()
+        print(f"[Trust Decay] {len(agents)} agents processed, {decayed} decayed, {verified} newly verified")
+    except Exception as e:
+        print(f"[Trust Decay] Error: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(
+    run_daily_trust_decay,
+    trigger=CronTrigger(hour=0, minute=0, timezone="UTC"),
+    id="trust_decay",
+    name="Daily Trust Decay",
+    replace_existing=True,
+)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler.start()
+    print("[Scheduler] Started - trust decay runs daily at 00:00 UTC")
+    yield
+    scheduler.shutdown()
+    print("[Scheduler] Stopped")
+
+
 app = FastAPI(
     title="ClawDir",
     description="AI Agent Directory - Discover and rate AI agents",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan,
 )
 
 # CORS
