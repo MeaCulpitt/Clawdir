@@ -1059,6 +1059,3 @@ def get_stats(db: Session = Depends(get_db)):
         "total_agents": total_agents,
         "total_ratings": total_ratings
     }
-```
-
----
