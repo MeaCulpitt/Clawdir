@@ -208,6 +208,3 @@ class SimilarAgentsResponse(BaseModel):
     agent_id: str
     similar: List[AgentListResponse]
     total: int
-```
-
----
