@@ -379,7 +379,7 @@ def discover_agents(
         if category:
             query = query.filter(Capability.category == category)
     
-      if q:
+    if q:
         search_term = f"%{q}%"
         query = query.filter(
             or_(
