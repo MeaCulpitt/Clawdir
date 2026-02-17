@@ -1,8 +1,3 @@
----
-
-## backend/app/schemas.py
-
-```python
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
