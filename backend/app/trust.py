@@ -1,8 +1,3 @@
----
-
-## backend/app/trust.py
-
-```python
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
