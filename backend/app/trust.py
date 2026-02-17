@@ -154,6 +154,3 @@ def update_verification_tiers(db: Session):
     
     db.commit()
     return {"updated": updated}
-```
-
----
