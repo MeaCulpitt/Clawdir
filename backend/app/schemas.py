@@ -1,3 +1,8 @@
+---
+
+## backend/app/schemas.py
+
+```python
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -50,10 +55,12 @@ class AgentResponse(BaseModel):
     endpoint: str
     description: Optional[str]
     trust_score: float
+    trust_tier: str = "none"  # none, bronze, silver, gold
     ratings_received: int
     capabilities: List[CapabilityResponse]
     is_active: bool
     verified_endpoint: bool
+    is_verified: bool
     created_at: datetime
     last_seen: Optional[datetime]
     
@@ -75,6 +82,7 @@ class AgentListResponse(BaseModel):
     endpoint: str
     description: Optional[str]
     trust_score: float
+    trust_tier: str = "none"
     ratings_received: int
     capabilities: List[CapabilityResponse]
     relevance_score: Optional[float] = None
@@ -119,10 +127,10 @@ class RatingDetail(BaseModel):
 # --- Discovery Schemas ---
 
 class DiscoverQuery(BaseModel):
-    q: Optional[str] = None  # Natural language query
-    capability: Optional[str] = None  # Exact capability type
-    category: Optional[str] = None  # Category filter
-    min_trust: float = 20.0
+    q: Optional[str] = None
+    capability: Optional[str] = None
+    category: Optional[str] = None
+    min_trust: float = 0.0
     max_price: Optional[float] = None
     limit: int = Field(10, ge=1, le=100)
 
@@ -131,3 +139,80 @@ class DiscoverResponse(BaseModel):
     agents: List[AgentListResponse]
     total: int
     query_ms: int
+
+
+# --- Pagination ---
+
+class PaginatedResponse(BaseModel):
+    items: List[Any]
+    next_cursor: Optional[str] = None
+    prev_cursor: Optional[str] = None
+    has_more: bool
+    total: int
+
+
+# --- Follow Schemas ---
+
+class FollowResponse(BaseModel):
+    agent_id: str
+    name: str
+    trust_score: float
+    trust_tier: str = "none"
+
+
+class FollowingResponse(BaseModel):
+    following: List[FollowResponse]
+    total: int
+
+
+class FollowersResponse(BaseModel):
+    followers: List[FollowResponse]
+    total: int
+
+
+# --- Category Schemas ---
+
+class CategoryCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+
+
+class CategoryResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class AgentCategoryResponse(BaseModel):
+    categories: List[CategoryResponse]
+
+
+# --- Health Schemas ---
+
+class HealthResponse(BaseModel):
+    agent_id: str
+    status: str  # healthy, degraded, down
+    last_seen: Optional[datetime]
+    last_health_check: Optional[datetime]
+    latency_ms: Optional[float]
+    uptime_percent: float = 100.0
+
+
+# --- Recommendation Schemas ---
+
+class RecommendationResponse(BaseModel):
+    agents: List[AgentListResponse]
+    total: int
+
+
+class SimilarAgentsResponse(BaseModel):
+    agent_id: str
+    similar: List[AgentListResponse]
+    total: int
+```
+
+---
