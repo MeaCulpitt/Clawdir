@@ -379,16 +379,16 @@ def discover_agents(
         if category:
             query = query.filter(Capability.category == category)
     
-    if q:
+      if q:
         search_term = f"%{q}%"
         query = query.filter(
             or_(
-                Agent.name.ilike(search.description.ilike(search_term)
+                Agent.name.ilike(search_term),
+                Agent.description.ilike(search_term)
             )
         )
     
-_term),
-                Agent    total = query.distinct().count()
+    total = query.distinct().count()
     
     agents = (
         query
