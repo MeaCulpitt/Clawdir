@@ -151,9 +151,31 @@ app.add_middleware(RateLimitMiddleware)
 
 # --- Health ---
 
+from fastapi.responses import FileResponse
+import os
+
+FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")
+
 @app.get("/")
 def root():
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
     return {"service": "ClawDir", "status": "ok"}
+
+@app.get("/{page}")
+def serve_frontend(page: str):
+    page_map = {
+        "dashboard": "dashboard.html",
+        "agent": "agent.html",
+        "leaderboard": "leaderboard.html",
+        "activity": "activity.html",
+    }
+    html_file = page_map.get(page, "index.html")
+    file_path = os.path.join(FRONTEND_DIR, html_file)
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
 @app.post("/v1/admin/reset-db")
